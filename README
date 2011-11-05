@@ -1,0 +1,3 @@
+OTML, a human readable and easy typing data serialization file format.
+This is a compact version of its emitter/parser extracted from OTClient
+in just one header with no dependencies.
