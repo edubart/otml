@@ -101,8 +101,7 @@ namespace otml_util {
 };
 
 
-class OTMLException : public std::exception
-{
+class OTMLException : public std::exception {
 public:
     OTMLException(const OTMLNodePtr& node, const std::string& error);
     OTMLException(const OTMLDocumentPtr& doc, const std::string& error, int line = -1);
@@ -114,8 +113,7 @@ protected:
     std::string m_what;
 };
 
-class OTMLNode : public std::enable_shared_from_this<OTMLNode>
-{
+class OTMLNode : public std::enable_shared_from_this<OTMLNode> {
 public:
     virtual ~OTMLNode() { }
 
@@ -190,8 +188,7 @@ protected:
     bool m_null;
 };
 
-class OTMLDocument : public OTMLNode
-{
+class OTMLDocument : public OTMLNode {
 public:
     virtual ~OTMLDocument() { }
     static OTMLDocumentPtr create();
@@ -204,10 +201,12 @@ private:
     OTMLDocument() { }
 };
 
-class OTMLParser
-{
+class OTMLParser {
 public:
-    OTMLParser(OTMLDocumentPtr doc, std::istream& in);
+    OTMLParser(OTMLDocumentPtr doc, std::istream& in) :
+        currentDepth(0), currentLine(0),
+        doc(doc), currentParent(doc), previousNode(0),
+        in(in) { }
     void parse();
 
 private:
@@ -224,14 +223,12 @@ private:
     std::istream& in;
 };
 
-class OTMLEmitter
-{
+class OTMLEmitter {
 public:
     static std::string emitNode(const OTMLNodePtr& node, int currentDepth = -1);
 };
 
-inline OTMLException::OTMLException(const OTMLNodePtr& node, const std::string& error)
-{
+inline OTMLException::OTMLException(const OTMLNodePtr& node, const std::string& error) {
     std::stringstream ss;
     ss << "OTML error";
     if(!node->source().empty())
@@ -240,8 +237,7 @@ inline OTMLException::OTMLException(const OTMLNodePtr& node, const std::string& 
     m_what = ss.str();
 }
 
-inline OTMLException::OTMLException(const OTMLDocumentPtr& doc, const std::string& error, int line)
-{
+inline OTMLException::OTMLException(const OTMLDocumentPtr& doc, const std::string& error, int line) {
     std::stringstream ss;
     ss << "OTML error";
     if(doc && !doc->source().empty()) {
@@ -253,16 +249,14 @@ inline OTMLException::OTMLException(const OTMLDocumentPtr& doc, const std::strin
     m_what = ss.str();
 }
 
-inline OTMLNodePtr OTMLNode::create(std::string tag, bool unique)
-{
+inline OTMLNodePtr OTMLNode::create(std::string tag, bool unique) {
     OTMLNodePtr node(new OTMLNode);
     node->setTag(tag);
     node->setUnique(unique);
     return node;
 }
 
-inline OTMLNodePtr OTMLNode::create(std::string tag, std::string value)
-{
+inline OTMLNodePtr OTMLNode::create(std::string tag, std::string value) {
     OTMLNodePtr node(new OTMLNode);
     node->setTag(tag);
     node->setValue(value);
@@ -270,8 +264,7 @@ inline OTMLNodePtr OTMLNode::create(std::string tag, std::string value)
     return node;
 }
 
-inline bool OTMLNode::hasChildren() const
-{
+inline bool OTMLNode::hasChildren() const {
     int count = 0;
     for(const OTMLNodePtr& child : m_children) {
         if(!child->isNull())
@@ -280,8 +273,7 @@ inline bool OTMLNode::hasChildren() const
     return count > 0;
 }
 
-inline OTMLNodePtr OTMLNode::get(const std::string& childTag) const
-{
+inline OTMLNodePtr OTMLNode::get(const std::string& childTag) const {
     for(const OTMLNodePtr& child : m_children) {
         if(child->tag() == childTag && !child->isNull())
             return child;
@@ -289,15 +281,13 @@ inline OTMLNodePtr OTMLNode::get(const std::string& childTag) const
     return nullptr;
 }
 
-inline OTMLNodePtr OTMLNode::getIndex(int childIndex) const
-{
+inline OTMLNodePtr OTMLNode::getIndex(int childIndex) const {
     if(childIndex < size() && childIndex >= 0)
         return m_children[childIndex];
     return nullptr;
 }
 
-inline OTMLNodePtr OTMLNode::at(const std::string& childTag)
-{
+inline OTMLNodePtr OTMLNode::at(const std::string& childTag) {
     OTMLNodePtr res;
     for(const OTMLNodePtr& child : m_children) {
         if(child->tag() == childTag && !child->isNull()) {
@@ -310,15 +300,13 @@ inline OTMLNodePtr OTMLNode::at(const std::string& childTag)
     return res;
 }
 
-inline OTMLNodePtr OTMLNode::atIndex(int childIndex)
-{
+inline OTMLNodePtr OTMLNode::atIndex(int childIndex) {
     if(childIndex >= size() || childIndex < 0)
         throw OTMLException(shared_from_this(), otml_util::mkstr("child node with index '", childIndex, "' not found"));
     return m_children[childIndex];
 }
 
-inline void OTMLNode::addChild(const OTMLNodePtr& newChild)
-{
+inline void OTMLNode::addChild(const OTMLNodePtr& newChild) {
     if(newChild->hasTag()) {
         for(const OTMLNodePtr& node : m_children) {
             if(node->tag() == newChild->tag() && (node->isUnique() || newChild->isUnique())) {
@@ -341,8 +329,7 @@ inline void OTMLNode::addChild(const OTMLNodePtr& newChild)
     newChild->setParent(shared_from_this());
 }
 
-inline bool OTMLNode::removeChild(const OTMLNodePtr& oldChild)
-{
+inline bool OTMLNode::removeChild(const OTMLNodePtr& oldChild) {
     auto it = std::find(m_children.begin(), m_children.end(), oldChild);
     if(it != m_children.end()) {
         m_children.erase(it);
@@ -352,8 +339,7 @@ inline bool OTMLNode::removeChild(const OTMLNodePtr& oldChild)
     return false;
 }
 
-inline bool OTMLNode::replaceChild(const OTMLNodePtr& oldChild, const OTMLNodePtr& newChild)
-{
+inline bool OTMLNode::replaceChild(const OTMLNodePtr& oldChild, const OTMLNodePtr& newChild) {
     auto it = std::find(m_children.begin(), m_children.end(), oldChild);
     if(it != m_children.end()) {
         oldChild->setParent(nullptr);
@@ -365,23 +351,20 @@ inline bool OTMLNode::replaceChild(const OTMLNodePtr& oldChild, const OTMLNodePt
     return false;
 }
 
-inline void OTMLNode::merge(const OTMLNodePtr& node)
-{
+inline void OTMLNode::merge(const OTMLNodePtr& node) {
     for(const OTMLNodePtr& child : node->m_children)
         addChild(child->clone());
     setTag(node->tag());
     setSource(node->source());
 }
 
-inline void OTMLNode::clear()
-{
+inline void OTMLNode::clear() {
     for(const OTMLNodePtr& child : m_children)
         child->setParent(nullptr);
     m_children.clear();
 }
 
-inline OTMLNodeList OTMLNode::children() const
-{
+inline OTMLNodeList OTMLNode::children() const {
     OTMLNodeList children;
     for(const OTMLNodePtr& child : m_children)
         if(!child->isNull())
@@ -389,8 +372,7 @@ inline OTMLNodeList OTMLNode::children() const
     return children;
 }
 
-inline OTMLNodePtr OTMLNode::clone() const
-{
+inline OTMLNodePtr OTMLNode::clone() const {
     OTMLNodePtr myClone(new OTMLNode);
     myClone->setTag(m_tag);
     myClone->setValue(m_value);
@@ -402,8 +384,7 @@ inline OTMLNodePtr OTMLNode::clone() const
     return myClone;
 }
 
-inline std::string OTMLNode::emit()
-{
+inline std::string OTMLNode::emit() {
     return OTMLEmitter::emitNode(shared_from_this(), 0);
 }
 
@@ -461,21 +442,18 @@ void OTMLNode::writeIn(const T& v) {
     addChild(child);
 }
 
-inline OTMLDocumentPtr OTMLDocument::create()
-{
+inline OTMLDocumentPtr OTMLDocument::create() {
     OTMLDocumentPtr doc(new OTMLDocument);
     doc->setTag("doc");
     return doc;
 }
 
-inline OTMLDocumentPtr OTMLDocument::parse(const std::string& fileName)
-{
+inline OTMLDocumentPtr OTMLDocument::parse(const std::string& fileName) {
     std::ifstream fin(fileName);
     return parse(fin, fileName);
 }
 
-inline OTMLDocumentPtr OTMLDocument::parse(std::istream& in, const std::string& source)
-{
+inline OTMLDocumentPtr OTMLDocument::parse(std::istream& in, const std::string& source) {
     OTMLDocumentPtr doc(new OTMLDocument);
     doc->setSource(source);
     OTMLParser parser(doc, in);
@@ -483,13 +461,11 @@ inline OTMLDocumentPtr OTMLDocument::parse(std::istream& in, const std::string& 
     return doc;
 }
 
-inline std::string OTMLDocument::emit()
-{
+inline std::string OTMLDocument::emit() {
     return OTMLEmitter::emitNode(shared_from_this());
 }
 
-inline bool OTMLDocument::save(const std::string& fileName)
-{
+inline bool OTMLDocument::save(const std::string& fileName) {
     m_source = fileName;
     std::ofstream fout(fileName);
     if(fout.good()) {
@@ -500,8 +476,7 @@ inline bool OTMLDocument::save(const std::string& fileName)
     return false;
 }
 
-inline std::string OTMLEmitter::emitNode(const OTMLNodePtr& node, int currentDepth)
-{
+inline std::string OTMLEmitter::emitNode(const OTMLNodePtr& node, int currentDepth) {
     std::stringstream ss;
     if(currentDepth >= 0) {
         for(int i=0;i<currentDepth;++i)
@@ -546,31 +521,21 @@ inline std::string OTMLEmitter::emitNode(const OTMLNodePtr& node, int currentDep
     return ss.str();
 }
 
-inline OTMLParser::OTMLParser(OTMLDocumentPtr doc, std::istream& in) :
-    currentDepth(0), currentLine(0),
-    doc(doc), currentParent(doc), previousNode(0),
-    in(in)
-{
-}
-
-inline void OTMLParser::parse()
-{
+inline void OTMLParser::parse() {
     if(!in.good())
         throw OTMLException(doc, "cannot read from input stream");
     while(!in.eof())
         parseLine(getNextLine());
 }
 
-inline std::string OTMLParser::getNextLine()
-{
+inline std::string OTMLParser::getNextLine() {
     currentLine++;
     std::string line;
     std::getline(in, line);
     return line;
 }
 
-inline int OTMLParser::getLineDepth(const std::string& line, bool multilining)
-{
+inline int OTMLParser::getLineDepth(const std::string& line, bool multilining) {
     std::size_t spaces = 0;
     while(line[spaces] == ' ')
         spaces++;
@@ -585,8 +550,7 @@ inline int OTMLParser::getLineDepth(const std::string& line, bool multilining)
     return depth;
 }
 
-inline void OTMLParser::parseLine(std::string line)
-{
+inline void OTMLParser::parseLine(std::string line) {
     int depth = getLineDepth(line);
     if(depth == -1)
         return;
@@ -606,8 +570,7 @@ inline void OTMLParser::parseLine(std::string line)
     parseNode(line);
 }
 
-inline void OTMLParser::parseNode(const std::string& data)
-{
+inline void OTMLParser::parseNode(const std::string& data) {
     std::string tag;
     std::string value;
     std::size_t dotsPos = data.find_first_of(':');
@@ -635,7 +598,6 @@ inline void OTMLParser::parseNode(const std::string& data)
             } else {
                 otml_util::trim(line);
                 if(!line.empty()) {
-                    // rewind and break
                     in.seekg(lastPos, std::ios::beg);
                     currentLine--;
                     break;
