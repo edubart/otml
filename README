@@ -1,3 +1,45 @@
 OTML, a human readable and easy typing data serialization file format.
 This is a compact version of its emitter/parser extracted from OTClient
 in just one header with no dependencies.
+
+This is an exemple of a OTML file taken from OTClient:
+
+TopPanel
+  id: topMenu
+  anchors.top: parent.top
+  anchors.left: parent.left
+  anchors.right: parent.right
+  focusable: false
+
+  TopButton
+    id: settingsButton
+    anchors.top: parent.top
+    anchors.left: parent.left
+    margin.top: 4
+    margin.left: 6
+    tooltip: Options
+    onClick: Options.create()
+
+    UIWidget
+      size: 16 16
+      image: /core_styles/icons/settings.png
+      anchors.centerIn: parent
+      phantom: true
+
+  TopButton
+    anchors.top: prev.top
+    anchors.left: prev.right
+    margin.left: 6
+    tooltip: Enter game with a character
+    onClick: |
+      if Game.isOnline() then
+        CharacterList.show()
+      else
+        EnterGame.show()
+      end
+
+    UIWidget
+      size: 16 16
+      image: /core_styles/icons/login.png
+      anchors.centerIn: parent
+      phantom: true
