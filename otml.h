@@ -462,7 +462,7 @@ inline OTMLDocumentPtr OTMLDocument::parse(std::istream& in, const std::string& 
 }
 
 inline std::string OTMLDocument::emit() {
-    return OTMLEmitter::emitNode(shared_from_this());
+    return OTMLEmitter::emitNode(shared_from_this()) + "\n";
 }
 
 inline bool OTMLDocument::save(const std::string& fileName) {

@@ -2,7 +2,7 @@ OTML, a human readable and easy typing data serialization file format.
 This is a compact version of its emitter/parser extracted from OTClient
 in just one header with no dependencies.
 
-This is an exemple of a OTML file taken from OTClient:
+This is an example of a OTML file taken from OTClient:
 
 TopPanel
   id: topMenu
@@ -43,3 +43,4 @@ TopPanel
       image: /core_styles/icons/login.png
       anchors.centerIn: parent
       phantom: true
+
