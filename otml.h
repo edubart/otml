@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <boost/algorithm/string.hpp>
+#include <boost/tokenizer.hpp>
 
 class OTMLNode;
 class OTMLDocument;
@@ -713,8 +714,19 @@ inline void OTMLParser::parseNode(const std::string& data) {
     node->setSource(doc->source() + ":" + otml_util::safeCast<std::string>(nodeLine));
     if(value == "~")
         node->setNull(true);
-    else
-        node->setValue(value);
+    else {
+        if(boost::starts_with(value, "[") && boost::ends_with(value, "]")) {
+            typedef boost::tokenizer<boost::escaped_list_separator<char> > Tokenizer;
+            std::string tmp = value.substr(1, value.length()-2);
+            Tokenizer tok(tmp);
+            for(Tokenizer::iterator it = tok.begin(), end = tok.end(); it != end; ++it) {
+                std::string v = *it;
+                boost::trim(v);
+                node->writeIn(v);
+            }
+        } else
+            node->setValue(value);
+    }
 
     currentParent->addChild(node);
     previousNode = node;
