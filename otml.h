@@ -75,24 +75,35 @@ namespace otml_util {
     }
 
     template<>
-    inline bool cast(const std::string& in, int& i) {
-        if(in.find_first_not_of("0123456789") != std::string::npos)
-            return false;
-        i = atoi(in.c_str());
-        return true;
-    }
-
-    template<>
     inline bool cast(const std::string& in, long& l) {
-        if(in.find_first_not_of("0123456789") != std::string::npos)
+        if(in.find_first_not_of("-0123456789") != std::string::npos)
+            return false;
+        std::size_t t = in.find_last_of('-');
+        if(t != std::string::npos && t != 0)
             return false;
         l = atol(in.c_str());
         return true;
     }
 
     template<>
+    inline bool cast(const std::string& in, int& i) {
+        long l;
+        if(cast(in, l)) {
+            i=l;
+            return true;
+        }
+        return false;
+    }
+
+    template<>
     inline bool cast(const std::string& in, double& d) {
-        if(in.find_first_not_of("0123456789.") != std::string::npos)
+        if(in.find_first_not_of("-0123456789.") != std::string::npos)
+            return false;
+        std::size_t t = in.find_last_of('-');
+        if(t != std::string::npos &&  t != 0)
+            return false;
+        t = in.find_first_of('.');
+        if(t != std::string::npos && (t == 0 || t == in.length()-1 || in.find_first_of('.', t+1) != std::string::npos))
             return false;
         d = atof(in.c_str());
         return true;
@@ -450,7 +461,7 @@ inline std::string OTMLNode::emit() {
 }
 
 template<>
-inline std::string OTMLNode::value<std::string>() {
+inline std::string OTMLNode::value() {
     std::string value = m_value;
     if(boost::starts_with(value, "\"") && boost::ends_with(value, "\"")) {
         value = value.substr(1, value.length()-2);
