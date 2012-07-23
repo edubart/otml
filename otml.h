@@ -14,26 +14,23 @@ class OTMLDocument;
 class OTMLParser;
 class OTMLEmitter;
 
+#ifdef __GXX_EXPERIMENTAL_CXX0X__
 typedef std::shared_ptr<OTMLNode> OTMLNodePtr;
+typedef std::enable_shared_from_this<OTMLNode> OTMLNodeEnableSharedFromThis;
 typedef std::shared_ptr<OTMLDocument> OTMLDocumentPtr;
 typedef std::weak_ptr<OTMLNode> OTMLNodeWeakPtr;
+#else
+#include <boost/shared_ptr.hpp>
+#include <boost/enable_shared_from_this.hpp>
+typedef boost::shared_ptr<OTMLNode> OTMLNodePtr;
+typedef boost::enable_shared_from_this<OTMLNode> OTMLNodeEnableSharedFromThis;
+typedef boost::shared_ptr<OTMLDocument> OTMLDocumentPtr;
+typedef boost::weak_ptr<OTMLNode> OTMLNodeWeakPtr;
+#endif
+
 typedef std::vector<OTMLNodePtr> OTMLNodeList;
 
 namespace otml_util {
-    inline void fillOstream(std::ostringstream&) { }
-    template<class T, class... Args>
-    void fillOstream(std::ostringstream& stream, const T& first, const Args&... rest) {
-        stream << first;
-        fillOstream(stream, rest...);
-    }
-
-    template<class... T>
-    std::string mkstr(const T&... args) {
-        std::ostringstream buf;
-        fillOstream(buf, args...);
-        return buf.str();
-    }
-
     template<typename T, typename R>
     bool cast(const T& in, R& out) {
         std::stringstream ss;
@@ -113,7 +110,7 @@ protected:
     std::string m_what;
 };
 
-class OTMLNode : public std::enable_shared_from_this<OTMLNode> {
+class OTMLNode : public OTMLNodeEnableSharedFromThis {
 public:
     virtual ~OTMLNode() { }
 
@@ -151,20 +148,21 @@ public:
     bool removeChild(const OTMLNodePtr& oldChild);
     bool replaceChild(const OTMLNodePtr& oldChild, const OTMLNodePtr& newChild);
     void merge(const OTMLNodePtr& node);
+    void copy(const OTMLNodePtr& node);
     void clear();
 
     OTMLNodeList children() const;
     OTMLNodePtr clone() const;
 
-    template<typename T = std::string>
+    template<typename T>
     T value();
-    template<typename T = std::string>
+    template<typename T>
     T valueAt(const std::string& childTag);
-    template<typename T = std::string>
+    template<typename T>
     T valueAtIndex(int childIndex);
-    template<typename T = std::string>
+    template<typename T>
     T valueAt(const std::string& childTag, const T& def);
-    template<typename T = std::string>
+    template<typename T>
     T valueAtIndex(int childIndex, const T& def);
 
     template<typename T>
@@ -205,7 +203,7 @@ class OTMLParser {
 public:
     OTMLParser(OTMLDocumentPtr doc, std::istream& in) :
         currentDepth(0), currentLine(0),
-        doc(doc), currentParent(doc), previousNode(0),
+        doc(doc), currentParent(doc),
         in(in) { }
     void parse();
 
@@ -266,7 +264,8 @@ inline OTMLNodePtr OTMLNode::create(std::string tag, std::string value) {
 
 inline bool OTMLNode::hasChildren() const {
     int count = 0;
-    for(const OTMLNodePtr& child : m_children) {
+    for(OTMLNodeList::const_iterator it = m_children.begin(), end = m_children.end(); it != end; ++it) {
+        const OTMLNodePtr& child = *it;
         if(!child->isNull())
             count++;
     }
@@ -274,49 +273,65 @@ inline bool OTMLNode::hasChildren() const {
 }
 
 inline OTMLNodePtr OTMLNode::get(const std::string& childTag) const {
-    for(const OTMLNodePtr& child : m_children) {
+    for(OTMLNodeList::const_iterator it = m_children.begin(), end = m_children.end(); it != end; ++it) {
+        const OTMLNodePtr& child = *it;
         if(child->tag() == childTag && !child->isNull())
             return child;
     }
-    return nullptr;
+    return OTMLNodePtr();
 }
 
 inline OTMLNodePtr OTMLNode::getIndex(int childIndex) const {
     if(childIndex < size() && childIndex >= 0)
         return m_children[childIndex];
-    return nullptr;
+    return OTMLNodePtr();
 }
 
 inline OTMLNodePtr OTMLNode::at(const std::string& childTag) {
     OTMLNodePtr res;
-    for(const OTMLNodePtr& child : m_children) {
+    for(OTMLNodeList::iterator it = m_children.begin(), end = m_children.end(); it != end; ++it) {
+        const OTMLNodePtr& child = *it;
         if(child->tag() == childTag && !child->isNull()) {
             res = child;
             break;
         }
     }
-    if(!res)
-        throw OTMLException(shared_from_this(), otml_util::mkstr("child node with tag '", childTag, "' not found"));
+    if(!res) {
+        std::stringstream ss;
+        ss << "child node with tag '" << childTag << "' not found";
+        throw OTMLException(shared_from_this(), ss.str());
+    }
     return res;
 }
 
 inline OTMLNodePtr OTMLNode::atIndex(int childIndex) {
-    if(childIndex >= size() || childIndex < 0)
-        throw OTMLException(shared_from_this(), otml_util::mkstr("child node with index '", childIndex, "' not found"));
+    if(childIndex >= size() || childIndex < 0) {
+        std::stringstream ss;
+        ss << "child node with index '" << childIndex << "' not found";
+        throw OTMLException(shared_from_this(), ss.str());
+    }
     return m_children[childIndex];
 }
 
 inline void OTMLNode::addChild(const OTMLNodePtr& newChild) {
     if(newChild->hasTag()) {
-        for(const OTMLNodePtr& node : m_children) {
+        for(OTMLNodeList::iterator it = m_children.begin(), end = m_children.end(); it != end; ++it) {
+            const OTMLNodePtr& node = *it;
             if(node->tag() == newChild->tag() && (node->isUnique() || newChild->isUnique())) {
                 newChild->setUnique(true);
+
+                if(node->hasChildren() && newChild->hasChildren()) {
+                    OTMLNodePtr tmpNode = node->clone();
+                    tmpNode->merge(newChild);
+                    newChild->copy(tmpNode);
+                }
+
                 replaceChild(node, newChild);
-                auto it = m_children.begin();
+                OTMLNodeList::iterator it = m_children.begin();
                 while(it != m_children.end()) {
                     OTMLNodePtr node = (*it);
                     if(node != newChild && node->tag() == newChild->tag()) {
-                        node->setParent(nullptr);
+                        node->setParent(OTMLNodePtr());
                         it = m_children.erase(it);
                     } else
                         ++it;
@@ -330,19 +345,19 @@ inline void OTMLNode::addChild(const OTMLNodePtr& newChild) {
 }
 
 inline bool OTMLNode::removeChild(const OTMLNodePtr& oldChild) {
-    auto it = std::find(m_children.begin(), m_children.end(), oldChild);
+    OTMLNodeList::iterator it = std::find(m_children.begin(), m_children.end(), oldChild);
     if(it != m_children.end()) {
         m_children.erase(it);
-        oldChild->setParent(nullptr);
+        oldChild->setParent(OTMLNodePtr());
         return true;
     }
     return false;
 }
 
 inline bool OTMLNode::replaceChild(const OTMLNodePtr& oldChild, const OTMLNodePtr& newChild) {
-    auto it = std::find(m_children.begin(), m_children.end(), oldChild);
+    OTMLNodeList::iterator it = std::find(m_children.begin(), m_children.end(), oldChild);
     if(it != m_children.end()) {
-        oldChild->setParent(nullptr);
+        oldChild->setParent(OTMLNodePtr());
         newChild->setParent(shared_from_this());
         it = m_children.erase(it);
         m_children.insert(it, newChild);
@@ -351,24 +366,44 @@ inline bool OTMLNode::replaceChild(const OTMLNodePtr& oldChild, const OTMLNodePt
     return false;
 }
 
-inline void OTMLNode::merge(const OTMLNodePtr& node) {
-    for(const OTMLNodePtr& child : node->m_children)
+inline void OTMLNode::copy(const OTMLNodePtr& node)
+{
+    setTag(node->tag());
+    setValue(node->value<std::string>());
+    setUnique(node->isUnique());
+    setNull(node->isNull());
+    setSource(node->source());
+    clear();
+    for(OTMLNodeList::iterator it = m_children.begin(), end = m_children.end(); it != end; ++it) {
+        const OTMLNodePtr& child = *it;
         addChild(child->clone());
+    }
+}
+
+inline void OTMLNode::merge(const OTMLNodePtr& node) {
+    for(OTMLNodeList::iterator it = m_children.begin(), end = m_children.end(); it != end; ++it) {
+        const OTMLNodePtr& child = *it;
+        addChild(child->clone());
+    }
     setTag(node->tag());
     setSource(node->source());
 }
 
 inline void OTMLNode::clear() {
-    for(const OTMLNodePtr& child : m_children)
-        child->setParent(nullptr);
+    for(OTMLNodeList::iterator it = m_children.begin(), end = m_children.end(); it != end; ++it) {
+        const OTMLNodePtr& child = *it;
+        child->setParent(OTMLNodePtr());
+    }
     m_children.clear();
 }
 
 inline OTMLNodeList OTMLNode::children() const {
     OTMLNodeList children;
-    for(const OTMLNodePtr& child : m_children)
+    for(OTMLNodeList::const_iterator it = m_children.begin(), end = m_children.end(); it != end; ++it) {
+        const OTMLNodePtr& child = *it;
         if(!child->isNull())
             children.push_back(child);
+    }
     return children;
 }
 
@@ -379,8 +414,10 @@ inline OTMLNodePtr OTMLNode::clone() const {
     myClone->setUnique(m_unique);
     myClone->setNull(m_null);
     myClone->setSource(m_source);
-    for(const OTMLNodePtr& child : m_children)
+    for(OTMLNodeList::const_iterator it = m_children.begin(), end = m_children.end(); it != end; ++it) {
+        const OTMLNodePtr& child = *it;
         myClone->addChild(child->clone());
+    }
     return myClone;
 }
 
@@ -431,6 +468,7 @@ void OTMLNode::write(const T& v) {
 template<typename T>
 void OTMLNode::writeAt(const std::string& childTag, const T& v) {
     OTMLNodePtr child = OTMLNode::create(childTag);
+    child->setUnique(true);
     child->write<T>(v);
     addChild(child);
 }
@@ -449,7 +487,7 @@ inline OTMLDocumentPtr OTMLDocument::create() {
 }
 
 inline OTMLDocumentPtr OTMLDocument::parse(const std::string& fileName) {
-    std::ifstream fin(fileName);
+    std::ifstream fin(fileName.c_str());
     return parse(fin, fileName);
 }
 
@@ -467,7 +505,7 @@ inline std::string OTMLDocument::emit() {
 
 inline bool OTMLDocument::save(const std::string& fileName) {
     m_source = fileName;
-    std::ofstream fout(fileName);
+    std::ofstream fout(fileName.c_str());
     if(fout.good()) {
         fout << emit();
         fout.close();
@@ -491,7 +529,7 @@ inline std::string OTMLEmitter::emitNode(const OTMLNodePtr& node, int currentDep
             ss << " ~";
         else if(node->hasValue()) {
             ss << " ";
-            std::string value = node->value();
+            std::string value = node->value<std::string>();
             if(value.find("\n") != std::string::npos) {
                 if(value[value.length()-1] == '\n' && value[value.length()-2] == '\n')
                     ss << "|+";
