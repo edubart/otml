@@ -39,12 +39,22 @@ void push_otml_subnode_luavalue(const OTMLNodePtr& node)
 */
 void lua_pushOtmlValue(lua_State* L, const OTMLNodePtr& node)
 {
+
     if(node->hasValue()) {
-        // convert boolean types
-        if(node->value<std::string>() == "true" || node->value<std::string>() == "false")
-            lua_pushboolean(L, node->value<bool>());
+        union {
+            bool b;
+            double d;
+            long l;
+        };
+        std::string value = node->rawValue();
+        if(otml_util::cast(value, b))
+            lua_pushboolean(L, b);
+        else if(otml_util::cast(value, l))
+            lua_pushinteger(L, l);
+        else if(otml_util::cast(value, d))
+            lua_pushnumber(L, d);
         else
-            lua_pushstring(L, node->value<std::string>().c_str());
+            lua_pushstring(L, value.c_str());
     } else if(node->hasChildren()) {
         lua_newtable(L);
         bool pushedChild = false;

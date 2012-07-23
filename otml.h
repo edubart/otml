@@ -8,6 +8,7 @@
 #include <exception>
 #include <memory>
 #include <algorithm>
+#include <cmath>
 #include <boost/algorithm/string.hpp>
 
 class OTMLNode;
@@ -56,20 +57,45 @@ namespace otml_util {
 
     template<>
     inline bool cast(const std::string& in, bool& b) {
-        static std::string validNames[2][4] = {{"true","yes","on","1"}, {"false","no","off","0"}};
-        bool ret = false;
-        for(int i=0;i<4;++i) {
-            if(in == validNames[0][i]) {
-                b = true;
-                ret = true;
-                break;
-            } else if(in == validNames[1][i]) {
-                b = false;
-                ret = true;
-                break;
-            }
-        }
-        return ret;
+        if(in == "true")
+            b = true;
+        else if(in == "false")
+            b = false;
+        else
+            return false;
+        return true;
+    }
+
+    template<>
+    inline bool cast(const std::string& in, char& c) {
+        if(in.length() != 1)
+            return false;
+        c = in[0];
+        return true;
+    }
+
+    template<>
+    inline bool cast(const std::string& in, int& i) {
+        if(in.find_first_not_of("0123456789") != std::string::npos)
+            return false;
+        i = atoi(in.c_str());
+        return true;
+    }
+
+    template<>
+    inline bool cast(const std::string& in, long& l) {
+        if(in.find_first_not_of("0123456789") != std::string::npos)
+            return false;
+        l = atol(in.c_str());
+        return true;
+    }
+
+    template<>
+    inline bool cast(const std::string& in, double& d) {
+        if(in.find_first_not_of("0123456789.") != std::string::npos)
+            return false;
+        d = atof(in.c_str());
+        return true;
     }
 
     template<>
@@ -118,6 +144,7 @@ public:
     int size() const { return m_children.size(); }
     OTMLNodePtr parent() const { return m_parent.lock(); }
     std::string source() const { return m_source; }
+    std::string rawValue() const { return m_value; }
 
     bool isUnique() const { return m_unique; }
     bool isNull() const { return m_null; }
@@ -366,7 +393,7 @@ inline bool OTMLNode::replaceChild(const OTMLNodePtr& oldChild, const OTMLNodePt
 inline void OTMLNode::copy(const OTMLNodePtr& node)
 {
     setTag(node->tag());
-    setValue(node->value<std::string>());
+    setValue(node->rawValue());
     setUnique(node->isUnique());
     setNull(node->isNull());
     setSource(node->source());
@@ -420,6 +447,20 @@ inline OTMLNodePtr OTMLNode::clone() const {
 
 inline std::string OTMLNode::emit() {
     return OTMLEmitter::emitNode(shared_from_this(), 0);
+}
+
+template<>
+inline std::string OTMLNode::value<std::string>() {
+    std::string value = m_value;
+    if(boost::starts_with(value, "\"") && boost::ends_with(value, "\"")) {
+        value = value.substr(1, value.length()-2);
+        boost::replace_all(value, "\\\\", "\\");
+        boost::replace_all(value, "\\\"", "\"");
+        boost::replace_all(value, "\\t",  "\t");
+        boost::replace_all(value, "\\n",  "\n");
+        boost::replace_all(value, "\\'",  "\'");
+    }
+    return value;
 }
 
 template<typename T>
@@ -531,7 +572,7 @@ inline std::string OTMLEmitter::emitNode(const OTMLNodePtr& node, int currentDep
             ss << " ~";
         else if(node->hasValue()) {
             ss << " ";
-            std::string value = node->value<std::string>();
+            std::string value = node->rawValue();
             if(value.find("\n") != std::string::npos) {
                 if(value[value.length()-1] == '\n' && value[value.length()-2] == '\n')
                     ss << "|+";
@@ -661,17 +702,9 @@ inline void OTMLParser::parseNode(const std::string& data) {
     node->setSource(doc->source() + ":" + otml_util::safeCast<std::string>(nodeLine));
     if(value == "~")
         node->setNull(true);
-    else {
-        if(boost::starts_with(value, "\"") && boost::ends_with(value, "\"")) {
-            value = value.substr(1, value.length()-2);
-            boost::replace_all(value, "\\\\", "\\");
-            boost::replace_all(value, "\\\"", "\"");
-            boost::replace_all(value, "\\t",  "\t");
-            boost::replace_all(value, "\\n",  "\n");
-            boost::replace_all(value, "\\'",  "\'");
-        }
+    else
         node->setValue(value);
-    }
+
     currentParent->addChild(node);
     previousNode = node;
 }
