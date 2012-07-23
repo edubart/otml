@@ -8,6 +8,7 @@
 #include <exception>
 #include <memory>
 #include <algorithm>
+#include <boost/algorithm/string.hpp>
 
 class OTMLNode;
 class OTMLDocument;
@@ -90,16 +91,12 @@ namespace otml_util {
             throw BadCast();
         return r;
     }
-
-    inline void trim(std::string &s) {
-        s.erase(s.begin(), std::find_if(s.begin(), s.end(), std::not1(std::ptr_fun<int, int>(std::isspace))));
-        s.erase(std::find_if(s.rbegin(), s.rend(), std::not1(std::ptr_fun<int, int>(std::isspace))).base(), s.end());
-    }
 };
 
 
 class OTMLException : public std::exception {
 public:
+    OTMLException(const std::string& error) : m_what(error) { }
     OTMLException(const OTMLNodePtr& node, const std::string& error);
     OTMLException(const OTMLDocumentPtr& doc, const std::string& error, int line = -1);
     virtual ~OTMLException() throw() { };
@@ -488,6 +485,11 @@ inline OTMLDocumentPtr OTMLDocument::create() {
 
 inline OTMLDocumentPtr OTMLDocument::parse(const std::string& fileName) {
     std::ifstream fin(fileName.c_str());
+    if(!fin.good()) {
+        std::stringstream ss;
+        ss << "failed to open file " << fileName;
+        throw OTMLException(ss.str());
+    }
     return parse(fin, fileName);
 }
 
@@ -592,7 +594,7 @@ inline void OTMLParser::parseLine(std::string line) {
     int depth = getLineDepth(line);
     if(depth == -1)
         return;
-    otml_util::trim(line);
+    boost::trim(line);
     if(line.empty())
         return;
     if(line.substr(0, 2) == "//")
@@ -615,7 +617,7 @@ inline void OTMLParser::parseNode(const std::string& data) {
     int nodeLine = currentLine;
     if(!data.empty() && data[0] == '-') {
         value = data.substr(1);
-        otml_util::trim(value);
+        boost::trim(value);
     } else if(dotsPos != std::string::npos) {
         tag = data.substr(0, dotsPos);
         if(data.size() > dotsPos+1)
@@ -623,8 +625,8 @@ inline void OTMLParser::parseNode(const std::string& data) {
     } else {
         tag = data;
     }
-    otml_util::trim(tag);
-    otml_util::trim(value);
+    boost::trim(tag);
+    boost::trim(value);
     if(value == "|" || value == "|-" || value == "|+") {
         std::string multiLineData;
         do {
@@ -634,7 +636,7 @@ inline void OTMLParser::parseNode(const std::string& data) {
             if(depth > currentDepth) {
                 multiLineData += line.substr((currentDepth+1)*2);
             } else {
-                otml_util::trim(line);
+                boost::trim(line);
                 if(!line.empty()) {
                     in.seekg(lastPos, std::ios::beg);
                     currentLine--;
@@ -659,8 +661,17 @@ inline void OTMLParser::parseNode(const std::string& data) {
     node->setSource(doc->source() + ":" + otml_util::safeCast<std::string>(nodeLine));
     if(value == "~")
         node->setNull(true);
-    else
+    else {
+        if(boost::starts_with(value, "\"") && boost::ends_with(value, "\"")) {
+            value = value.substr(1, value.length()-2);
+            boost::replace_all(value, "\\\\", "\\");
+            boost::replace_all(value, "\\\"", "\"");
+            boost::replace_all(value, "\\t",  "\t");
+            boost::replace_all(value, "\\n",  "\n");
+            boost::replace_all(value, "\\'",  "\'");
+        }
         node->setValue(value);
+    }
     currentParent->addChild(node);
     previousNode = node;
 }
